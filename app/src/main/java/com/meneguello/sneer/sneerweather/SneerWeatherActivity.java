@@ -6,7 +6,9 @@ import android.content.Intent;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
+import android.net.ConnectivityManager;
 import android.os.Bundle;
+import android.widget.Toast;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -18,6 +20,7 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.concurrent.FutureTask;
 
 import javax.net.ssl.HttpsURLConnection;
 
@@ -28,8 +31,18 @@ public class SneerWeatherActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        checkLocation();
+    }
+
+    private void checkLocation() {
 
         LocationManager locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+            Toast.makeText(this, "GPS must be enabled to fetch your location. Turn it on in the preferences and try again.", Toast.LENGTH_LONG).show();
+            finish();
+            return;
+        }
+
         try {
             locationManager.requestSingleUpdate(LocationManager.GPS_PROVIDER, new LocationListener() {
                 @Override
@@ -55,10 +68,15 @@ public class SneerWeatherActivity extends Activity {
         } catch (SecurityException e) {
             //TODO
         }
-
     }
 
     private void checkWeather(final Location location) {
+        /**ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (!connectivityManager.getActiveNetworkInfo().isConnectedOrConnecting()) {
+            Toast.makeText(SneerWeatherActivity.this, "The network is unavailable. Connect and try again.", Toast.LENGTH_LONG).show();
+            finish();
+            return;
+        }*/
         new Thread() {
             @Override
             public void run() {
@@ -75,6 +93,12 @@ public class SneerWeatherActivity extends Activity {
                     conn.setRequestMethod("GET");
                     conn.setDoInput(true);
                     conn.connect();
+
+                    if (conn.getResponseCode() != 200) {
+                        Toast.makeText(SneerWeatherActivity.this, "The weather service returns failure. Try again later.", Toast.LENGTH_LONG).show();
+                        finish();
+                        return;
+                    }
 
                     InputStream is = conn.getInputStream();
 
@@ -99,7 +123,7 @@ public class SneerWeatherActivity extends Activity {
                     String nameCity = jsonObject.getString("name");
                     String country = jsonObject.getJSONObject("sys").getString("country");
 
-                    startService(getIntent().<Intent>getParcelableExtra("SEND_MESSAGE").setAction(String.format("%s/%s %dºC %s", nameCity, country, (int)(temp-273.16), description)));
+                    startService(getIntent().<Intent>getParcelableExtra("SEND_MESSAGE").setAction(String.format("%s/%s %dºC/%dºF %s", nameCity, country, (int)(temp - 273.16), (int)((temp - 273.15)* 1.8 + 32), description)));
                     finish();
 
                 } catch (MalformedURLException e) {
